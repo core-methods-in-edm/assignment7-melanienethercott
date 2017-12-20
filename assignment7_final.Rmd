@@ -1,0 +1,156 @@
+---
+title: "assignment7_final"
+author: "Mel Nethercott"
+date: "12/18/2017"
+output: html_document
+---
+
+In the following assignment you will be looking at data from an one level of an online geography tutoring system used by 5th grade students. The game involves a pre-test of geography knowledge (pre.test), a series of assignments for which you have the average score (av.assignment.score),  the number of messages sent by each student to other students about the assignments (messages), the number of forum posts students posted asking questions about the assignment (forum.posts), a post test at the end of the level (post.test) and whether or not the system allowed the students to go on to the next level (level.up).  
+
+#Upload data & packages
+```{r}
+D1 <- read.csv("online.data.csv", sep = ",", header = TRUE)
+library (rpart)
+library (rpart.plot)
+install.packages ("rattle")
+library (rattle)
+install.packages ("RColorBrewer")
+library (RColorBrewer)
+```
+
+#Visualization. Try to capture an intution about the data and the relationships
+```{r}
+#Start by creating histograms of the distributions for all variables (#HINT: look up "facet" in the ggplot documentation)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+viz1 <- ggplot(data = D1, aes(x = post.test.score)) + geom_histogram() + facet_grid(level.up ~.)
+plot(viz1)
+
+viz2 <- ggplot(data = D1, aes(x = pre.test.score)) + geom_histogram() + facet_grid(level.up ~.)
+plot(viz2)
+
+viz3 <- ggplot(data = D1, aes(x = av.assignment.score)) + geom_histogram() + facet_grid(level.up ~.)
+plot(viz3)
+
+viz4 <- ggplot(data = D1, aes(x = messages)) + geom_histogram() + facet_grid(level.up ~.)
+plot(viz4)
+
+viz5 <- ggplot(data = D1, aes(x = forum.posts)) + geom_histogram() + facet_grid(level.up ~.)
+plot(viz5)
+
+#The histogram visualizations show that those students who went up a level had performed better across the pre and post-tests and the assignments (as measured by post.test.score, pre.test.score and av.assignment.score) than those students who did not move up a level. The scores for tests and assignments are not only higher among students who went up a level, but also more narrowly distributed than those students who did not move up a level, meaning there was less spread in students performance results and a smaller 'tail'. Students who moved up a level also sent more messages about assignments than students who stayed at the same level but we can't evidence a causal relationship here. However, the amount of forum posts is relatively similar across all students, suggesting no link between the amount of quesions posted and moving up a level or not. 
+
+#Visualize the relationships between variables. (NB- could also use the code:plot(D1 [2:6]) for this.)
+pairs(~post.test.score + pre.test.score + av.assignment.score + messages + forum.posts, data= D1)
+
+#There is a lot here so I'm focussing on some of the more interesting relationships. Looking across all variables it seems to be that the strongest correlations are around messages sent. This is interesting because there is a strong positive correlation between post.test.score and messages, meaning students who sent more messages also scored more highly on the post test. Since this relationship is relatively much weaker for messages sent and pre test, it suggests that messages played a key part in shaping final test outcomes. There is also positive correlation between messages and average assignment score, so those students who sent more messages scored more in assignments too (and vice versa). So it seems the amount of messages a student sent is linked with their performance in tests and assignments.
+```
+
+#Classification tree
+```{r}
+#Create a classification tree that predicts whether a student "levels up" in the online course using three variables of your choice (as we did last time, set all controls to their minimums).
+
+ctree1 <- rpart(level.up ~ post.test.score + pre.test.score + av.assignment.score + messages + forum.posts, method = "class", data = D1)
+fancyRpartPlot (ctree1)
+
+#Plot and generate a CP table for your tree 
+printcp(ctree1)
+
+#Generate a probability value that represents the probability that a student levels up based your classification tree.
+#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
+D1$pred <- predict(ctree1, type = "prob")[,2]
+
+#Now you can generate the ROC curve for your model. You will need to install the package ROCR to do this.
+install.packages("ROCR")
+library(ROCR)
+
+#Plot the curve.
+pred.detail <- prediction(D1$pred, D1$level.up) 
+plot(performance(pred.detail, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+
+#Calculate the Area Under the Curve. Unlist liberates the AUC value from the "performance" object created by ROCR. 
+unlist(slot(performance(pred.detail,"auc"), "y.values")) #Area under the curve= 1. Perfect ROC curve.
+
+#Now repeat this process, but using the variables you did not use for the previous model and compare the plots & results of your two models. Which one do you think was the better model? Why?
+
+##Model 1 is the best model becuase it results in a perfect ROC curve with no false positives and, with an area under the curve score of 1, it's accuracy as a model is also perfect. Model 4- the average assignment score- is a close second, with an almost perfect ROC curve and a just below perfect accuracy (area under the curve is 0.99).
+
+#Model 2- Post test variable model.
+pred.detail2 <- prediction(D1$post.test.score, D1$level.up) 
+plot(performance(pred.detail2, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+unlist(slot(performance(pred.detail2,"auc"), "y.values")) #Area under the curve = 0.919925. More false positives and a lower curve than ROC curve number 1.
+
+#Model 3- Pre test variable.
+pred.detail3 <- prediction(D1$pre.test.score, D1$level.up) 
+plot(performance(pred.detail3, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+unlist(slot(performance(pred.detail3,"auc"), "y.values")) #Area under the curve = 0.8055146. More false positives than ROC curve number 3, and a lower area under the curve value.
+
+#Model 4- Average assignment score.
+pred.detail4 <- prediction(D1$av.assignment.score, D1$level.up) 
+plot(performance(pred.detail4, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+unlist(slot(performance(pred.detail4,"auc"), "y.values")) #Area under the curve = 0.9906104.More true positives than model 3 and model 2. More than 1.
+
+#Model 5- Messages.
+pred.detail5 <- prediction(D1$messages, D1$level.up) 
+plot(performance(pred.detail5, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+unlist(slot(performance(pred.detail5,"auc"), "y.values")) #Area under the curve = 0.8978.
+
+#Model 6- Questions posted in forum.
+pred.detail6 <- prediction(D1$forum.posts, D1$level.up) 
+plot(performance(pred.detail6, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+unlist(slot(performance(pred.detail6,"auc"), "y.values")) #Area under the curve = 0.6446208.
+```
+
+#Thresholds
+```{r}
+#Look at the ROC plot for your first model. Based on this plot choose a probability threshold that balances capturing the most correct predictions against false positives. Then generate a new variable in your data set that classifies each student according to your chosen threshold.
+
+threshold.pred1 <- 0.3
+D1$pred_int = 0
+D1$pred_int[D1$pred >= threshold.pred1] = 1
+
+#Now generate three diagnostics:
+#correct predictions / total predictions
+D1$accuracy.model1 <- 0.817
+
+# true positive / (true positive + false positive)
+D1$precision.model1 <- 0.9425
+
+# true positive / (true positive + false negative)
+D1$recall.model1 <- 0.702
+
+#Finally, calculate Kappa for your model according to:
+#First generate the table of comparisons
+table1 <- table(D1$level.up, D1$accuracy.model1)
+
+#Convert to matrix
+matrix1 <- as.matrix(table1)
+
+#Calculate kappa =1
+kappa(matrix1, exact = TRUE)/kappa(matrix1)
+#Kappa =1
+
+#Now choose a different threshold value and repeat these diagnostics. What conclusions can you draw about your two thresholds?
+#Diagnostic 2
+table2 <- table(D1$level.up, D1$precision.model1)
+matrix2 <- as.matrix(table2)
+kappa(matrix2, exact = TRUE)/kappa(matrix2)
+#Kappa =1
+
+#Diagnostic 3
+table3 <- table(D1$level.up, D1$recall.model1)
+matrix3 <- as.matrix(table3)
+kappa(matrix3, exact = TRUE)/kappa(matrix3)
+#Kappa =1
+
+```
+
+
